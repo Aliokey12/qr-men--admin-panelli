@@ -1,0 +1,117 @@
+// Firestore Güvenlik Kuralları
+// Firebase konsolunda Firestore > Rules bölümüne kopyalayın
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Kimlik doğrulama fonksiyonu
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Admin rolü kontrolü
+    function isAdmin() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Kullanıcı koleksiyonu kuralları
+    match /users/{userId} {
+      // Kullanıcılar kendi profillerini okuyabilir
+      // Adminler tüm kullanıcıları okuyabilir
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      // Sadece adminler kullanıcı oluşturabilir veya güncelleyebilir
+      allow write: if isAdmin();
+    }
+    
+    // Kategori koleksiyonu kuralları
+    match /categories/{categoryId} {
+      // Herkes kategorileri okuyabilir
+      allow read: if true;
+      // Sadece adminler kategori oluşturabilir, güncelleyebilir veya silebilir
+      allow write: if isAdmin();
+    }
+    
+    // Menü öğeleri koleksiyonu kuralları
+    match /menuItems/{itemId} {
+      // Herkes menü öğelerini okuyabilir
+      allow read: if true;
+      // Sadece adminler menü öğesi oluşturabilir, güncelleyebilir veya silebilir
+      allow write: if isAdmin();
+    }
+    
+    // Ayarlar koleksiyonu kuralları
+    match /settings/{settingId} {
+      // Herkes ayarları okuyabilir
+      allow read: if true;
+      // Sadece adminler ayarları güncelleyebilir
+      allow write: if isAdmin();
+    }
+    
+    // Analitik koleksiyonu kuralları
+    match /analytics/{docId} {
+      // Sadece adminler analitikleri okuyabilir
+      allow read: if isAdmin();
+      // Herkes analitik verisi ekleyebilir (görüntülenme sayısı vb.)
+      allow create: if true;
+      // Sadece adminler analitik verilerini güncelleyebilir veya silebilir
+      allow update, delete: if isAdmin();
+    }
+  }
+}
+
+// Storage Güvenlik Kuralları
+// Firebase konsolunda Storage > Rules bölümüne kopyalayın
+
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Kimlik doğrulama fonksiyonu
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Admin rolü kontrolü
+    function isAdmin() {
+      return isAuthenticated() && 
+        firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Dosya boyutu kontrolü (max 5MB)
+    function isValidFileSize() {
+      return request.resource.size <= 5 * 1024 * 1024;
+    }
+    
+    // Dosya türü kontrolü (sadece resimler)
+    function isImage() {
+      return request.resource.contentType.matches('image/.*');
+    }
+    
+    // Tüm dosyalar için kurallar
+    match /{allPaths=**} {
+      // Herkes dosyaları okuyabilir
+      allow read: if true;
+      // Sadece adminler dosya yükleyebilir, güncelleyebilir veya silebilir
+      // Ayrıca dosya boyutu ve türü kontrol edilir
+      allow write: if isAdmin() && isValidFileSize() && isImage();
+    }
+    
+    // Menü öğeleri klasörü için kurallar
+    match /menu-items/{fileName} {
+      // Herkes menü öğesi resimlerini okuyabilir
+      allow read: if true;
+      // Sadece adminler menü öğesi resimleri yükleyebilir, güncelleyebilir veya silebilir
+      allow write: if isAdmin() && isValidFileSize() && isImage();
+    }
+    
+    // Kategoriler klasörü için kurallar
+    match /categories/{fileName} {
+      // Herkes kategori resimlerini okuyabilir
+      allow read: if true;
+      // Sadece adminler kategori resimleri yükleyebilir, güncelleyebilir veya silebilir
+      allow write: if isAdmin() && isValidFileSize() && isImage();
+    }
+  }
+} 
